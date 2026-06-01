@@ -94,6 +94,27 @@ void runSs58DecodingTests(const char* address) {
   checkResult("invalid SS58 checksum rejected", !getPublicKeyFromAddr(invalidChecksumAddress, publicKey));
 }
 
+void runSetDevicesApiValidationTests(const char* address) {
+  const std::vector<std::string> tooManyDevices(33, address);
+  const char* tooManyResult = robonomics.sendRWSSetDevices(tooManyDevices);
+  checkResult(
+    "API rejects 33 devices locally",
+    strcmp(tooManyResult, "error") == 0 &&
+      !robonomics.lastExtrinsicOk() &&
+      strcmp(robonomics.lastExtrinsicErrorMessage(), "Too many RWS devices: maximum is 32") == 0
+  );
+
+  std::string invalidAddress = address;
+  invalidAddress[ADDRESS_LENGTH - 1] = '0';
+  const char* invalidAddressResult = robonomics.sendRWSSetDevices({invalidAddress});
+  checkResult(
+    "API rejects invalid SS58 locally",
+    strcmp(invalidAddressResult, "error") == 0 &&
+      !robonomics.lastExtrinsicOk() &&
+      strcmp(robonomics.lastExtrinsicErrorMessage(), "Invalid SS58 device address at index 0") == 0
+  );
+}
+
 void setup() {
   Serial.begin(115200);
 
@@ -106,6 +127,7 @@ void setup() {
   const RobonomicsPublicKey device = getPublicKeyFromAddr(robonomics.getSs58Address());
   runSs58DecodingTests(robonomics.getSs58Address());
   runSetDevicesEncodingTests(device);
+  runSetDevicesApiValidationTests(robonomics.getSs58Address());
 }
 
 void loop() {

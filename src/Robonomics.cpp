@@ -78,6 +78,31 @@ const char* Robonomics::sendRWSDatalogRecord(const std::string& data, const char
     return res;
 }
 
+const char* Robonomics::sendRWSSetDevices(const std::vector<std::string>& deviceAddresses) {
+    constexpr size_t maxDevicesAmount = 32;
+    if (deviceAddresses.size() > maxDevicesAmount) {
+        return setLocalExtrinsicError("Too many RWS devices: maximum is 32");
+    }
+
+    std::vector<RobonomicsPublicKey> deviceKeys;
+    deviceKeys.reserve(deviceAddresses.size());
+    for (size_t i = 0; i < deviceAddresses.size(); ++i) {
+        RobonomicsPublicKey deviceKey;
+        if (!getPublicKeyFromAddr(deviceAddresses[i].c_str(), deviceKey)) {
+            return setLocalExtrinsicError(String("Invalid SS58 device address at index ") + String(i));
+        }
+        deviceKeys.push_back(deviceKey);
+    }
+
+    Data head_rws_set_devices_ = Data{0x37, 0x02};
+    Data call = callRwsSetDevices(head_rws_set_devices_, deviceKeys);
+    if (call.empty()) {
+        return setLocalExtrinsicError("Failed to encode RWS set_devices call");
+    }
+
+    return createAndSendExtrinsic(call);
+}
+
 #ifdef ROBONOMICS_USE_WS
 const char* Robonomics::sendRWSDatalogRecordAndWatch(const std::string& data, const char *owner_address, uint32_t timeout_ms) {
     Data head_dr_ = Data{0x33,0};
@@ -107,6 +132,14 @@ const char* Robonomics::sendRWSDatalogRecordAndWatch(const std::string& data, co
     return sendExtrinsicAndWatch(edata_, requestId, timeout_ms);
 }
 #endif
+
+const char* Robonomics::setLocalExtrinsicError(const String& message) {
+    last_extrinsic_ok_ = false;
+    last_extrinsic_error_code_ = 0;
+    last_extrinsic_error_message_ = message;
+    last_extrinsic_result_ = "error";
+    return last_extrinsic_result_.c_str();
+}
 
 const char* Robonomics::createAndSendExtrinsic(Data call) {
     const char* error_res = "error";

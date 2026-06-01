@@ -23,6 +23,7 @@ private:
     String last_watch_result_;
     bool last_watch_ok_ = false;
     String last_watch_status_;
+    const char* setLocalExtrinsicError(const String& message);
     const char* createAndSendExtrinsic(Data call);
     Data createCall();
     Data createPayload(Data call, uint32_t era, uint64_t nonce, uint64_t tip, uint32_t sv, uint32_t tv, std::string gen, std::string block);
@@ -40,6 +41,7 @@ public:
     void setPrivateKey(const char* hexPrivateKey);
     const char* sendDatalogRecord(const std::string& data);
     const char* sendRWSDatalogRecord(const std::string& data, const char *owner_address);
+    const char* sendRWSSetDevices(const std::vector<std::string>& deviceAddresses);
     const char* sendCustomCall();
     const char* getSs58Address() const;
     const char* getPrivateKey() const;
