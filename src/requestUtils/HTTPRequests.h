@@ -13,6 +13,15 @@
 #endif
 #include <Arduino_JSON.h>
 
+/** Per-request connect + read timeout (ms). Must be below firmware datalog watchdog. */
+#ifndef ROBONOMICS_HTTP_TIMEOUT_MS
+#define ROBONOMICS_HTTP_TIMEOUT_MS 45000UL
+#endif
+/** Max JSON-RPC response body size. */
+#ifndef ROBONOMICS_HTTP_MAX_BODY_BYTES
+#define ROBONOMICS_HTTP_MAX_BODY_BYTES 16384UL
+#endif
+
 class HTTPRequests {
     private:
         // Must outlive HTTPClient::begin(...) and POST().

@@ -5,6 +5,24 @@
 JSONVar emptyParamsArray;
 JSONVar paramsArray;
 
+/** Genesis block hash is chain-constant; avoid RPC on every datalog send. */
+static bool genesis_hash_cached = false;
+static std::string cached_genesis_hash;
+
+/** Runtime spec/tx versions change only on chain upgrades (rare). */
+static bool runtime_versions_cached = false;
+static uint32_t cached_spec_version = 0;
+static uint32_t cached_tx_version = 0;
+static unsigned long runtime_versions_cached_at_ms = 0;
+static const unsigned long RUNTIME_VERSIONS_CACHE_TTL_MS = 60UL * 60UL * 1000UL;
+
+static void invalidateRuntimeVersionCache() {
+    runtime_versions_cached = false;
+    cached_spec_version = 0;
+    cached_tx_version = 0;
+    runtime_versions_cached_at_ms = 0;
+}
+
 uint32_t getEra() {
     return 0;
 }
@@ -14,9 +32,16 @@ uint64_t getTip() {
 }
 
 bool getGenesisBlockHash(BlockchainUtils *blockchainUtils, std::string *blockHash) {
-    // return "525639f713f397dcf839bd022cd821f367ebcf179de7b9253531f8adbe5436d6"; // Vara
-    // return "631ccc82a078481584041656af292834e1ae6daab61d2875b4dd0c14bb9b17bc"; // Robonomics
-    return getBlockHash(blockchainUtils, 0, blockHash);
+    if (genesis_hash_cached) {
+        *blockHash = cached_genesis_hash;
+        return true;
+    }
+    if (!getBlockHash(blockchainUtils, 0, blockHash)) {
+        return false;
+    }
+    cached_genesis_hash = *blockHash;
+    genesis_hash_cached = true;
+    return true;
 }
 
 // Get Nonce
@@ -56,6 +81,16 @@ bool getBlockHash(BlockchainUtils *blockchainUtils, int block_number, std::strin
 // Get Runtime Info
 
 bool extractRuntimeVersions(BlockchainUtils *blockchainUtils, uint32_t *specVersion, uint32_t *transactionVersion) {
+    if (runtime_versions_cached &&
+        runtime_versions_cached_at_ms != 0 &&
+        (millis() - runtime_versions_cached_at_ms) < RUNTIME_VERSIONS_CACHE_TTL_MS) {
+        *specVersion = cached_spec_version;
+        *transactionVersion = cached_tx_version;
+        printf("[extractRuntimeVersions] cache hit spec=%u tx=%u\n",
+               *specVersion, *transactionVersion);
+        return true;
+    }
+
     printf("[extractRuntimeVersions] called\n");
 
     JSONVar runtimeInfo;
@@ -63,6 +98,7 @@ bool extractRuntimeVersions(BlockchainUtils *blockchainUtils, uint32_t *specVers
 
     if (!getRuntimeInfo(blockchainUtils, &runtimeInfo)) {
         printf("[extractRuntimeVersions] getRuntimeInfo FAILED\n");
+        invalidateRuntimeVersionCache();
         return false;
     }
     printf("[extractRuntimeVersions] getRuntimeInfo OK\n");
@@ -89,11 +125,16 @@ bool extractRuntimeVersions(BlockchainUtils *blockchainUtils, uint32_t *specVers
     if (runtimeInfo.hasOwnProperty("specVersion") && runtimeInfo.hasOwnProperty("transactionVersion")) {
         *specVersion = static_cast<uint32_t>((int)runtimeInfo["specVersion"]);
         *transactionVersion = static_cast<uint32_t>((int)runtimeInfo["transactionVersion"]);
+        cached_spec_version = *specVersion;
+        cached_tx_version = *transactionVersion;
+        runtime_versions_cached = true;
+        runtime_versions_cached_at_ms = millis();
         printf("[extractRuntimeVersions] SUCCESS: specVersion=%u, transactionVersion=%u\n", *specVersion, *transactionVersion);
         return true;
     }
 
     printf("[extractRuntimeVersions] FAILED: missing keys\n");
+    invalidateRuntimeVersionCache();
     return false;
 }
 

@@ -45,7 +45,57 @@ void HTTPRequests::setup(String host) {
     Serial.println(node_url);
 }
 
-void HTTPRequests::disconnect() {}
+void HTTPRequests::disconnect() {
+#ifdef ESP32
+    plain_client_.stop();
+    secure_client_.stop();
+#endif
+#ifdef ESP8266
+    plain_client_.stop();
+    secure_client_.stop();
+#endif
+}
+
+/** Read HTTP body with deadline; avoids blocking forever in getString() on half-open SSL. */
+static bool readResponseBody(HTTPClient& http, String& payload) {
+    payload = "";
+    WiFiClient* stream = http.getStreamPtr();
+    if (stream == nullptr) {
+        Serial.println("[HTTP] no response stream");
+        return false;
+    }
+    const unsigned long deadline = millis() + ROBONOMICS_HTTP_TIMEOUT_MS;
+    while (millis() < deadline) {
+        while (stream->available() > 0 && payload.length() < (int)ROBONOMICS_HTTP_MAX_BODY_BYTES) {
+            const int c = stream->read();
+            if (c < 0) {
+                break;
+            }
+            payload += static_cast<char>(c);
+        }
+        if (!http.connected() && stream->available() <= 0) {
+            break;
+        }
+        delay(2);
+        yield();
+    }
+    if (payload.length() == 0) {
+        Serial.println("[HTTP] response body empty or read timeout");
+        return false;
+    }
+    if (millis() >= deadline && (http.connected() || stream->available() > 0)) {
+        Serial.println("[HTTP] response body read timeout (truncated)");
+    }
+    return true;
+}
+
+static void configureHttpClient(HTTPClient& http) {
+    http.setReuse(false);
+#ifdef ESP32
+    http.setTimeout(ROBONOMICS_HTTP_TIMEOUT_MS);
+    http.setConnectTimeout(ROBONOMICS_HTTP_TIMEOUT_MS);
+#endif
+}
 
 JSONVar HTTPRequests::sendRequest(String message) {
     Serial.print("[HTTP]+POST:\n"); 
@@ -75,6 +125,7 @@ JSONVar HTTPRequests::sendRequest(String message) {
     }
 #endif
 
+    configureHttpClient(http);
     http.addHeader("Content-Type", "application/json");
     uint32_t httpCode = (uint32_t)http.POST(message);
     Serial.println("sent:");
@@ -82,10 +133,14 @@ JSONVar HTTPRequests::sendRequest(String message) {
     if (httpCode > 0) {
         Serial.printf("[HTTP]+POST code: %d\n", httpCode);
         if (httpCode == HTTP_CODE_OK) {
-            const String& payload = http.getString();
-            Serial.println("received:");
-            Serial.println(payload);
-            response = JSON.parse(payload);
+            String payload;
+            if (!readResponseBody(http, payload)) {
+                response["error"] = "body_read_timeout";
+            } else {
+                Serial.println("received:");
+                Serial.println(payload);
+                response = JSON.parse(payload);
+            }
         } else if (httpCode == 301 || httpCode == 302 || httpCode == 307 || httpCode == 308) {
             // Some mirrors redirect http->https or "/"->"/rpc/".
             String location = http.header("Location");
@@ -119,14 +174,19 @@ JSONVar HTTPRequests::sendRequest(String message) {
                 }
 #endif
 
+                configureHttpClient(http2);
                 http2.addHeader("Content-Type", "application/json");
                 uint32_t httpCode2 = (uint32_t)http2.POST(message);
                 Serial.printf("[HTTP]+POST retry code: %d\n", httpCode2);
                 if (httpCode2 == HTTP_CODE_OK) {
-                    const String& payload2 = http2.getString();
-                    Serial.println("received:");
-                    Serial.println(payload2);
-                    response = JSON.parse(payload2);
+                    String payload2;
+                    if (!readResponseBody(http2, payload2)) {
+                        response["error"] = "body_read_timeout";
+                    } else {
+                        Serial.println("received:");
+                        Serial.println(payload2);
+                        response = JSON.parse(payload2);
+                    }
                 } else {
                     Serial.println("HTTP response is not 200 (after redirect retry)");
                     response["error"] = httpCode2;
