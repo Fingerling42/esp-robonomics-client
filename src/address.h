@@ -20,6 +20,7 @@ typedef struct Address { unsigned char symbols[ADDRESS_LENGTH]; } Address;
 static int EncodeBase58(const unsigned char *bytes, int len, unsigned char result[]);
 static char* getAddrFromPublicKey(RobonomicsPublicKey &pubKey, uint16_t prefix);
 char* getAddrFromPrivateKey(uint8_t *private_key, uint16_t prefix);
+bool getPublicKeyFromAddr(const char *addrStr, RobonomicsPublicKey& pubk);
 RobonomicsPublicKey getPublicKeyFromAddr(const char *addrStr);
 
 // #ifdef __cplusplus

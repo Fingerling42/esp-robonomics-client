@@ -1,8 +1,13 @@
 #include <Arduino.h>
 #include <Call.h>
 #include <Robonomics.h>
+#include <cstring>
 
 Robonomics robonomics;
+
+void checkResult(const char* name, bool passed) {
+  Serial.printf("[%s] %s\r\n", passed ? "PASS" : "FAIL", name);
+}
 
 void printHex(const Data& data) {
   for (const auto byte : data) {
@@ -71,6 +76,24 @@ void runSetDevicesEncodingTests(const RobonomicsPublicKey& device) {
   checkCallSize("33 devices rejected", tooManyDevicesCall, 0);
 }
 
+void runSs58DecodingTests(const char* address) {
+  RobonomicsPublicKey publicKey;
+  checkResult("valid SS58 address", getPublicKeyFromAddr(address, publicKey));
+
+  char invalidBase58Address[ADDRESS_LENGTH + 1];
+  strncpy(invalidBase58Address, address, sizeof(invalidBase58Address));
+  invalidBase58Address[ADDRESS_LENGTH] = '\0';
+  invalidBase58Address[ADDRESS_LENGTH - 1] = '0';
+  checkResult("invalid Base58 symbol rejected", !getPublicKeyFromAddr(invalidBase58Address, publicKey));
+
+  char invalidChecksumAddress[ADDRESS_LENGTH + 1];
+  strncpy(invalidChecksumAddress, address, sizeof(invalidChecksumAddress));
+  invalidChecksumAddress[ADDRESS_LENGTH] = '\0';
+  invalidChecksumAddress[ADDRESS_LENGTH - 1] =
+    invalidChecksumAddress[ADDRESS_LENGTH - 1] == '1' ? '2' : '1';
+  checkResult("invalid SS58 checksum rejected", !getPublicKeyFromAddr(invalidChecksumAddress, publicKey));
+}
+
 void setup() {
   Serial.begin(115200);
 
@@ -81,6 +104,7 @@ void setup() {
   robonomics.generateAndSetPrivateKey();
 
   const RobonomicsPublicKey device = getPublicKeyFromAddr(robonomics.getSs58Address());
+  runSs58DecodingTests(robonomics.getSs58Address());
   runSetDevicesEncodingTests(device);
 }
 
