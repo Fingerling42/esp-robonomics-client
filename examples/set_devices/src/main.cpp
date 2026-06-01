@@ -3,6 +3,15 @@
 #include <Robonomics.h>
 #include <cstring>
 
+#ifndef RUN_LIVE_SET_DEVICES_TEST
+#define RUN_LIVE_SET_DEVICES_TEST 0
+#endif
+
+#if RUN_LIVE_SET_DEVICES_TEST
+#include <WiFi.h>
+#include "secrets.h"
+#endif
+
 Robonomics robonomics;
 
 void checkResult(const char* name, bool passed) {
@@ -115,6 +124,50 @@ void runSetDevicesApiValidationTests(const char* address) {
   );
 }
 
+#if RUN_LIVE_SET_DEVICES_TEST
+bool connectWifi() {
+  constexpr unsigned long wifiTimeoutMs = 30000;
+  const unsigned long startedAt = millis();
+
+  Serial.printf("Connecting to Wi-Fi SSID: %s\r\n", LIVE_WIFI_SSID);
+  WiFi.begin(LIVE_WIFI_SSID, LIVE_WIFI_PASSWORD);
+  while (WiFi.status() != WL_CONNECTED && millis() - startedAt < wifiTimeoutMs) {
+    delay(500);
+    Serial.print(".");
+  }
+  Serial.println();
+
+  if (WiFi.status() != WL_CONNECTED) {
+    Serial.println("[FAIL] Wi-Fi connection timeout");
+    return false;
+  }
+
+  Serial.printf("[PASS] Wi-Fi connected, IP: %s\r\n", WiFi.localIP().toString().c_str());
+  return true;
+}
+
+void runLiveSetDevicesTest(const std::string& deviceAddress) {
+  Serial.println("Starting LIVE rws.set_devices test");
+  if (!connectWifi()) {
+    return;
+  }
+
+  robonomics.setPrivateKey(LIVE_OWNER_PRIVATE_KEY_HEX);
+  robonomics.setup(LIVE_ROBONOMICS_RPC_HOST);
+
+  Serial.printf("Owner address: %s\r\n", robonomics.getSs58Address());
+  Serial.printf("Device address: %s\r\n", deviceAddress.c_str());
+  Serial.println("Submitting rws.set_devices transaction...");
+
+  const char* result = robonomics.sendRWSSetDevices({deviceAddress});
+  Serial.printf("Extrinsic result: %s\r\n", result);
+  Serial.printf("Extrinsic accepted by RPC: %s\r\n", robonomics.lastExtrinsicOk() ? "yes" : "no");
+  if (!robonomics.lastExtrinsicOk()) {
+    Serial.printf("Extrinsic error: %s\r\n", robonomics.lastExtrinsicErrorMessage());
+  }
+}
+#endif
+
 void setup() {
   Serial.begin(115200);
 
@@ -123,11 +176,18 @@ void setup() {
   Serial.println("Starting set_devices example");
 
   robonomics.generateAndSetPrivateKey();
+  const std::string deviceAddress = robonomics.getSs58Address();
 
-  const RobonomicsPublicKey device = getPublicKeyFromAddr(robonomics.getSs58Address());
-  runSs58DecodingTests(robonomics.getSs58Address());
+  const RobonomicsPublicKey device = getPublicKeyFromAddr(deviceAddress.c_str());
+  runSs58DecodingTests(deviceAddress.c_str());
   runSetDevicesEncodingTests(device);
-  runSetDevicesApiValidationTests(robonomics.getSs58Address());
+  runSetDevicesApiValidationTests(deviceAddress.c_str());
+
+#if RUN_LIVE_SET_DEVICES_TEST
+  runLiveSetDevicesTest(deviceAddress);
+#else
+  Serial.println("LIVE rws.set_devices test is disabled");
+#endif
 }
 
 void loop() {
