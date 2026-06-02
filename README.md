@@ -225,9 +225,6 @@ robonomics.lastExtrinsicResult();
 - Only Ed25519 signing is supported.
 - `setPrivateKey(const char*)` currently requires exactly `64` hex characters
   without a `0x` prefix and does not yet return a validation error.
-- The signing implementation currently signs payload bytes directly. Substrate
-  requires signing the Blake2-256 hash when the encoded payload is longer than
-  `256` bytes.
 - HTTP mode currently uses an insecure TLS client configuration. Do not rely
   on transport TLS alone for security-sensitive update flows.
 

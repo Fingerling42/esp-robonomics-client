@@ -1,6 +1,7 @@
 #include <Arduino.h>
 #include <Call.h>
 #include <Robonomics.h>
+#include <blake/blake2.h>
 #include <cstring>
 
 #ifndef RUN_LIVE_SET_DEVICES_TEST
@@ -10,6 +11,9 @@
 #if RUN_LIVE_SET_DEVICES_TEST
 #include <WiFi.h>
 #include "secrets.h"
+#ifndef LIVE_SET_DEVICES_REPEAT_COUNT
+#define LIVE_SET_DEVICES_REPEAT_COUNT 1
+#endif
 #endif
 
 Robonomics robonomics;
@@ -124,6 +128,28 @@ void runSetDevicesApiValidationTests(const char* address) {
   );
 }
 
+Data blake2b256(const Data& payload) {
+  Data digest(32);
+  blake2(digest.data(), digest.size(), payload.data(), payload.size(), NULL, 0);
+  return digest;
+}
+
+void runSigningPayloadSizeTests() {
+  uint8_t privateKey[32] = {0};
+  uint8_t publicKey[32];
+  Ed25519::derivePublicKey(publicKey, privateKey);
+
+  const Data payload256(256, 0x2a);
+  const Data signature256 = doSign(payload256, privateKey, publicKey);
+  const Data digestSignature256 = doSign(blake2b256(payload256), privateKey, publicKey);
+  checkResult("256-byte signing payload stays raw", signature256 != digestSignature256);
+
+  const Data payload257(257, 0x2a);
+  const Data signature257 = doSign(payload257, privateKey, publicKey);
+  const Data digestSignature257 = doSign(blake2b256(payload257), privateKey, publicKey);
+  checkResult("257-byte signing payload uses Blake2b-256", signature257 == digestSignature257);
+}
+
 #if RUN_LIVE_SET_DEVICES_TEST
 bool connectWifi() {
   constexpr unsigned long wifiTimeoutMs = 30000;
@@ -157,9 +183,11 @@ void runLiveSetDevicesTest(const std::string& deviceAddress) {
 
   Serial.printf("Owner address: %s\r\n", robonomics.getSs58Address());
   Serial.printf("Device address: %s\r\n", deviceAddress.c_str());
+  Serial.printf("Device entries: %u\r\n", LIVE_SET_DEVICES_REPEAT_COUNT);
   Serial.println("Submitting rws.set_devices transaction...");
 
-  const char* result = robonomics.sendRWSSetDevices({deviceAddress});
+  const std::vector<std::string> devices(LIVE_SET_DEVICES_REPEAT_COUNT, deviceAddress);
+  const char* result = robonomics.sendRWSSetDevices(devices);
   Serial.printf("Extrinsic result: %s\r\n", result);
   Serial.printf("Extrinsic accepted by RPC: %s\r\n", robonomics.lastExtrinsicOk() ? "yes" : "no");
   if (!robonomics.lastExtrinsicOk()) {
@@ -182,6 +210,7 @@ void setup() {
   runSs58DecodingTests(deviceAddress.c_str());
   runSetDevicesEncodingTests(device);
   runSetDevicesApiValidationTests(deviceAddress.c_str());
+  runSigningPayloadSizeTests();
 
 #if RUN_LIVE_SET_DEVICES_TEST
   runLiveSetDevicesTest(deviceAddress);

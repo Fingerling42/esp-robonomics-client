@@ -1,4 +1,5 @@
 #include "Extrinsic.h"
+#include "blake/blake2.h"
 
 // Robonomics runtime (specVersion=42) uses TxExtension tuple (see runtime/robonomics/src/lib.rs):
 // CheckEra, CheckNonce, ChargeTransactionPayment, CheckMetadataHash
@@ -78,16 +79,23 @@ std::vector<uint8_t> doPayload (Data call, uint32_t era, uint64_t nonce, uint64_
 }
 
 std::vector<uint8_t> doSign(Data data, uint8_t privateKey[32], uint8_t publicKey[32]) {
-
-    uint8_t payload[data.size()];             
     uint8_t sig[SIGNATURE_SIZE];
-     
-    std::copy(data.begin(), data.end(), payload);
+    uint8_t payloadHash[32];
+    const uint8_t* payload = data.data();
+    size_t payloadSize = data.size();
+
+    // Substrate SignedPayload hashes payloads longer than 256 bytes before signing.
+    if (payloadSize > 256) {
+        blake2(payloadHash, sizeof(payloadHash), payload, payloadSize, NULL, 0);
+        payload = payloadHash;
+        payloadSize = sizeof(payloadHash);
+    }
+
 #ifndef UNIT_TEST
-    Ed25519::sign(sig, privateKey, publicKey, payload, data.size());
+    Ed25519::sign(sig, privateKey, publicKey, payload, payloadSize);
 #else
     //do like Arduino Ed25519::sign() for unit test, i.e. by crypto++ library
-    CryptoPP::Donna::ed25519_sign(payload, data.size(), privateKey, publicKey, sig);
+    CryptoPP::Donna::ed25519_sign(payload, payloadSize, privateKey, publicKey, sig);
 #endif
     std::vector<byte> signature (sig,sig + SIGNATURE_SIZE);   // signed data as bytes vector
     return signature;
