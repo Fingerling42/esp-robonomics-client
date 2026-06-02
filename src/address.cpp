@@ -114,27 +114,48 @@ char* getAddrFromPrivateKey(uint8_t *private_key, uint16_t prefix) {
 }
 
 
-RobonomicsPublicKey getPublicKeyFromAddr(const char *addrStr) {
+bool getPublicKeyFromAddr(const char *addrStr, RobonomicsPublicKey& pubk) {
+    pubk = RobonomicsPublicKey{0};
+    if (addrStr == nullptr || strlen(addrStr) != ADDRESS_LENGTH) {
+        return false;
+    }
+
     Address addr;
     memcpy(addr.symbols, addrStr, ADDRESS_LENGTH);
-    RobonomicsPublicKey pubk{0};
+    for (size_t i = 0; i < ADDRESS_LENGTH; ++i) {
+        const unsigned char symbol = addr.symbols[i];
+        if (symbol >= 128 || ALPHABET_MAP[symbol] < 0) {
+            return false;
+        }
+    }
 
     unsigned char bs58decoded[ADDRESS_LENGTH];
     int len = DecodeBase58(addr.symbols, ADDRESS_LENGTH, bs58decoded);
-    if (len == 35) {
-        // Check the address checksum
-        // Add SS58RPE prefix, remove checksum (2 bytes)
-        uint8_t ssPrefixed[PUBLIC_KEY_LENGTH + 8] = {0x53, 0x53, 0x35, 0x38, 0x50, 0x52, 0x45};
-        memcpy(ssPrefixed + 7, bs58decoded, PUBLIC_KEY_LENGTH + 1);
-
-        unsigned char blake2bHashed[64] = {0};
-        blake2(blake2bHashed, 64, ssPrefixed, PUBLIC_KEY_LENGTH + 8, NULL, 0);
-        if (bs58decoded[1 + PUBLIC_KEY_LENGTH] != blake2bHashed[0] || 
-            bs58decoded[2 + PUBLIC_KEY_LENGTH] != blake2bHashed[1] ) {
-        }
-
-        memcpy(pubk.bytes, bs58decoded + 1, PUBLIC_KEY_LENGTH);
+    if (len != 35) {
+        return false;
     }
 
+    // Only one-byte SS58 network prefixes are supported by this decoder.
+    if (bs58decoded[0] >= 64) {
+        return false;
+    }
+
+    uint8_t ssPrefixed[PUBLIC_KEY_LENGTH + 8] = {0x53, 0x53, 0x35, 0x38, 0x50, 0x52, 0x45};
+    memcpy(ssPrefixed + 7, bs58decoded, PUBLIC_KEY_LENGTH + 1);
+
+    unsigned char blake2bHashed[64] = {0};
+    blake2(blake2bHashed, 64, ssPrefixed, PUBLIC_KEY_LENGTH + 8, NULL, 0);
+    if (bs58decoded[1 + PUBLIC_KEY_LENGTH] != blake2bHashed[0] ||
+        bs58decoded[2 + PUBLIC_KEY_LENGTH] != blake2bHashed[1]) {
+        return false;
+    }
+
+    memcpy(pubk.bytes, bs58decoded + 1, PUBLIC_KEY_LENGTH);
+    return true;
+}
+
+RobonomicsPublicKey getPublicKeyFromAddr(const char *addrStr) {
+    RobonomicsPublicKey pubk{0};
+    getPublicKeyFromAddr(addrStr, pubk);
     return pubk;
 }

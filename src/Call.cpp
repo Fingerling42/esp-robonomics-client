@@ -39,3 +39,19 @@ std::vector<uint8_t> callRws (Data head, RobonomicsPublicKey owner_key, Data par
     append(call, param); // add nested call
     return call;
 }
+
+std::vector<uint8_t> callRwsSetDevices(Data head, const std::vector<RobonomicsPublicKey>& devices) {
+    constexpr size_t maxDevicesAmount = 32;
+    if (devices.size() > maxDevicesAmount) {
+        return {};
+    }
+
+    Data call;
+    append(call, head);
+    append(call, encodeCompact(devices.size()));
+    for (const auto& device : devices) {
+        std::vector<uint8_t> accountId(device.bytes, device.bytes + PUBLIC_KEY_LENGTH);
+        append(call, accountId);
+    }
+    return call;
+}

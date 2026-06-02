@@ -1,12 +1,12 @@
 {
     "name": "ESPRobonomicsClient",
-    "version": "0.2.0",
-    "description": "Send transaction to Robonomcis parachain",
+    "version": "0.3.0",
+    "description": "Build, sign and submit selected Robonomics parachain extrinsics from ESP devices",
     "keywords": "robonomics, polkadot, kusama, blockchain, substrate",
     "repository":
     {
       "type": "git",
-      "url": "https://github.com/LoSk-p/esp-robonomics-client.git"
+      "url": "https://github.com/airalab/esp-robonomics-client.git"
     },
     "authors":
     [
@@ -15,7 +15,7 @@
         "url": "https://github.com/airalab"
       }
     ],
-    "license": "MIT",
+    "license": "Apache-2.0",
     "homepage": "https://robonomics.network/",
     "dependencies": {
       "arduino-libraries/Arduino_JSON": "0.2.0",
